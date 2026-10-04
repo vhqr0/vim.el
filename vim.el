@@ -158,13 +158,14 @@ BINDINGS is a list of KEY DEFINITION pairs as in `keymap-set'."
   (if (minibufferp)
       (vim-change-mode-to-insert)
     (vim-change-mode-to-normal))
-  (when-let* ((maps (seq-some (lambda (major)
-                                (alist-get major vim-major-mode-map-alist))
-                              (derived-mode-all-parents major-mode))))
-    (setq-local vim-emulation-map-alist
-                (list (cons 'vim-normal-mode (alist-get 'normal maps))
-                      (cons 'vim-visual-mode (alist-get 'visual maps))
-                      (cons 'vim-insert-mode (alist-get 'insert maps))))))
+  (if-let* ((maps (seq-some (lambda (major)
+                              (alist-get major vim-major-mode-map-alist))
+                            (derived-mode-all-parents major-mode))))
+      (setq-local vim-emulation-map-alist
+                  (list (cons 'vim-normal-mode (alist-get 'normal maps))
+                        (cons 'vim-visual-mode (alist-get 'visual maps))
+                        (cons 'vim-insert-mode (alist-get 'insert maps))))
+    (kill-local-variable 'vim-emulation-map-alist)))
 
 (defvar-keymap vim-global-mode-map)
 
@@ -198,6 +199,8 @@ BINDINGS is a list of KEY DEFINITION pairs as in `keymap-set'."
 (defun vim-exit-insert ()
   "Exit vim insert mode."
   (interactive)
+  (when abbrev-mode
+    (expand-abbrev))
   (vim-change-mode-to-normal)
   (unless (bolp)
     (backward-char 1)))
@@ -308,6 +311,7 @@ When pending, activate TRANSIENT-MAP if non-nil."
          ,(format "Vim move %s." key)
          (interactive)
          (vim-move ,move-fn ',type))
+       (eldoc-add-command ',name)
        (keymap-set vim-normal-mode-map ,(key-description key) #',name))))
 
 (defun vim-next-line (n)
@@ -655,6 +659,7 @@ KIND is inner or outer."
          ,(format "Vim %s text object %s." kind key)
          (interactive)
          (vim-move ,move-fn 'tobj))
+       (eldoc-add-command ',name)
        (keymap-set ,map ,(key-description key) #',name))))
 
 (defun vim-mark-thing (thing n outer)

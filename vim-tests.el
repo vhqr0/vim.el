@@ -486,5 +486,31 @@ Return (RESULT REGION-ACTIVE) after the error."
           (should (eq (keymap-lookup nil "j") #'ignore)))
       (vim-test-minor-mode -1))))
 
+(ert-deftest vim-test-major-mode-map-reset ()
+  (vim-define-major-mode-map 'vim-test-override-mode)
+  (with-temp-buffer
+    (vim-test-override-mode)
+    (vim-change-mode-to-default)
+    (should (local-variable-p 'vim-emulation-map-alist))
+    (setq major-mode 'fundamental-mode)
+    (vim-change-mode-to-default)
+    (should-not (local-variable-p 'vim-emulation-map-alist))
+    (should (eq (alist-get 'vim-normal-mode vim-emulation-map-alist) vim-normal-mode-map))))
+
+(ert-deftest vim-test-exit-insert-abbrev ()
+  (with-current-buffer (vim-test--setup "|" #'text-mode)
+    (let ((local-abbrev-table (make-abbrev-table)))
+      (define-abbrev local-abbrev-table "teh" "the")
+      (abbrev-mode 1)
+      (vim-test--execute "i teh <escape>")
+      (should (equal (vim-test--result) "th|e"))
+      (abbrev-mode -1)
+      (vim-test--execute "A SPC teh <escape>")
+      (should (equal (vim-test--result) "the te|h")))))
+
+(ert-deftest vim-test-eldoc ()
+  (should (eldoc--message-command-p 'vim-j))
+  (should (eldoc--message-command-p 'vim-iw)))
+
 (provide 'vim-tests)
 ;;; vim-tests.el ends here
