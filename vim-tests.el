@@ -216,6 +216,8 @@ Return (RESULT REGION-ACTIVE) after the error."
   (should (equal (vim-test-state "a|bc" "Y") '(normal nil "bc")))
   (should (equal (vim-test "a|bc" "r z") "a|zc"))
   (should (equal (vim-test "a|bcd" "3 r z") "a|zzz"))
+  (should (equal (vim-test "a|bcd" "r RET") "a|\ncd"))
+  (should (equal (vim-test "a|bcd" "2 r RET") "a|\n\nd"))
   (should (equal (vim-test "|abc" "~") "A|bc"))
   (should (equal (vim-test "|a\n  b\n  c" "J") "a| b\n  c"))
   (should (equal (vim-test "|a\n  b\n  c" "2 J") "a| b c")))

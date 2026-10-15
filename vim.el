@@ -949,6 +949,8 @@ A trailing newline is also excluded."
 (defun vim-replace-region (beg end)
   "Replace chars between BEG and END with a read char."
   (let ((char (vim-read-replace-char)))
+    (when (eq char ?\r)
+      (setq char ?\n))
     (delete-region beg end)
     (goto-char beg)
     (save-excursion
