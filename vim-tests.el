@@ -308,6 +308,11 @@ Return (RESULT REGION-ACTIVE) after the error."
   (should (equal (vim-test "|foo bar" "v e o") "|foo bar"))
   (should (equal (vim-test-state "|foo bar" "v e o") '(visual "fo" nil))))
 
+(ert-deftest vim-test-visual-reselect ()
+  (should (equal (vim-test-state "|foo bar" "v e <escape> g v") '(visual "fo" nil)))
+  (should (equal (vim-test-state "|foo bar" "v e o <escape> g v") '(visual "fo" nil)))
+  (should (equal (vim-test-state "|foo bar" "v e <escape> l g v") '(visual "foo" nil))))
+
 (ert-deftest vim-test-visual-op ()
   (should (equal (vim-test "|foo bar" "v e d") "|o bar"))
   (should (equal (vim-test "|foo bar" "v e x") "|o bar"))

@@ -196,6 +196,11 @@ BINDINGS is a list of KEY DEFINITION pairs as in `keymap-set'."
   (interactive)
   (deactivate-mark))
 
+(defun vim-activate-mark ()
+  "Activate the mark, reselecting the region between it and point."
+  (interactive)
+  (activate-mark))
+
 (defun vim-exit-insert ()
   "Exit vim insert mode."
   (interactive)
@@ -1363,6 +1368,7 @@ N is ignored."
 (keymap-set vim-normal-mode-map "g ;" #'vim-goto-last-change)
 (keymap-set vim-normal-mode-map "g o" #'pop-to-mark-command)
 (keymap-set vim-normal-mode-map "g O" #'pop-global-mark)
+(keymap-set vim-normal-mode-map "g v" #'vim-activate-mark)
 (keymap-set vim-normal-mode-map "g d" #'xref-find-definitions)
 (keymap-set vim-normal-mode-map "g r" #'revert-buffer-quick)
 (keymap-set vim-normal-mode-map "g R" #'revert-buffer)
