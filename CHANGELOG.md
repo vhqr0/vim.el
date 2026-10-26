@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.3.0
+
+Added:
+
+- `/ ? n N gg G` push the mark before jumping, unless the region is
+  active.
+- `gO` pops the global mark ring.
+- Abbrevs are expanded when exiting insert state.
+- Moves and text objects are eldoc commands.
+
+Changed:
+
+- `/` and `?` read a regexp from the minibuffer instead of using isearch.
+  They are ordinary moves, so ops, counts, visual state and `.` work with
+  them.  An empty regexp repeats the last search.
+- `go` pops the mark ring of the buffer instead of the global mark ring.
+- `r RET` replaces with a newline.
+
+Fixed:
+
+- Quitting `/` or `?` no longer moves to the match.
+- The override maps of a major mode no longer stay after changing to a
+  major mode without them.
+
 ## 0.2.0
 
 Added:
