@@ -23,6 +23,8 @@
         (python-indent-guess-indent-offset nil))
     (switch-to-buffer buffer)
     (deactivate-mark)
+    (setq mark-ring nil)
+    (set-marker (mark-marker) nil)
     (erase-buffer)
     (funcall mode)
     (insert (string-replace "|" "" text))
@@ -131,6 +133,62 @@ Return (RESULT REGION-ACTIVE) after the error."
   (should (equal (vim-test "|foo bar foo baz foo" "/ f o o RET") "foo bar |foo baz foo"))
   (should (equal (vim-test "|foo bar foo baz foo" "/ f o o RET n") "foo bar foo baz |foo"))
   (should (equal (vim-test "foo bar foo baz |foo" "? f o o RET") "foo bar |foo baz foo")))
+
+(ert-deftest vim-test-move-search-count ()
+  (should (equal (vim-test "|a foo b foo c foo" "2 / f o o RET") "a foo b |foo c foo"))
+  (should (equal (vim-test "a foo b foo c |foo" "2 ? f o o RET") "a |foo b foo c foo"))
+  (should (equal (vim-test "|a foo b foo c foo" "2 d / f o o RET") "|foo c foo"))
+  (should (equal (vim-test "|a foo b foo c foo" "/ f o o RET 2 n") "a foo b foo c |foo"))
+  (should (equal (vim-test "a foo b foo c |foo" "- / f o o RET") "a foo b |foo c foo"))
+  (should (equal (vim-test "a foo b foo c |foo" "- / f o o RET n") "a foo b foo c |foo")))
+
+(defun vim-test-jump (text keys)
+  "Execute KEYS on TEXT, return (RESULT MARK MARK-RING-LENGTH MARK-ACTIVE)."
+  (with-current-buffer (vim-test--setup text #'text-mode)
+    (ignore-errors (vim-test--execute keys))
+    (list (vim-test--result) (mark t) (length mark-ring) mark-active)))
+
+(ert-deftest vim-test-move-jump ()
+  (should (equal (vim-test-jump "|a foo b foo" "/ f o o RET") '("a |foo b foo" 1 0 nil)))
+  (should (equal (vim-test-jump "|a foo b foo" "/ f o o RET n") '("a foo b |foo" 3 1 nil)))
+  (should (equal (vim-test-jump "a foo b |foo" "? f o o RET") '("a |foo b foo" 9 0 nil)))
+  (should (equal (vim-test-jump "a\n|b\nc" "G") (quote ("a\nb\nc|" 3 0 nil))))
+  (should (equal (vim-test-jump "a\n|b\nc" "g g") '("|a\nb\nc" 3 0 nil)))
+  ;; No mark for a failed search, a non-jump move, an op or visual state.
+  (should (equal (vim-test-jump "|a foo" "/ b a r RET") '("|a foo" nil 0 nil)))
+  (should (equal (vim-test-jump "|a foo" "w") '("a |foo" nil 0 nil)))
+  (should (equal (vim-test-jump "|a foo b" "d / b RET") '("|b" 1 0 nil)))
+  (should (equal (vim-test-jump "a |foo b foo" "v / f o o RET") '("a foo b |foo" 3 0 t))))
+
+(ert-deftest vim-test-move-jump-back ()
+  (should (equal (vim-test "|a foo b foo c foo" "/ f o o RET n n g o") "a foo b |foo c foo"))
+  (should (equal (vim-test "|a foo b foo c foo" "/ f o o RET n n g o g o g o") "|a foo b foo c foo"))
+  (should (equal (vim-test "a\n|b\nc" "G g o") "a\n|b\nc")))
+
+(ert-deftest vim-test-move-search-repeat ()
+  (should (equal (vim-test "|a foo b foo c foo" "d / f o o RET .") "|foo c foo"))
+  (should (equal (vim-test "a foo b foo c |foo" "d ? f o o RET .") "a |foo")))
+
+(ert-deftest vim-test-move-search-empty ()
+  (should (equal (vim-test "|foo bar foo bar foo" "/ b a r RET / RET") "foo bar foo |bar foo"))
+  (should (equal (vim-test "|foo bar foo bar foo" "/ b a r RET n ? RET") "foo |bar foo bar foo")))
+
+(defun vim-test-quit (text keys)
+  "Execute KEYS on TEXT, which may quit, return the result text."
+  (with-current-buffer (vim-test--setup text #'text-mode)
+    (condition-case nil
+        (vim-test--execute keys)
+      (quit nil))
+    (vim-test--result)))
+
+(ert-deftest vim-test-move-search-quit ()
+  (should (equal (vim-test-quit "|foo bar foo baz foo" "/ f o o C-g") "|foo bar foo baz foo"))
+  (should (equal (vim-test-quit "|foo bar foo baz foo" "/ f o o <escape> <escape>") "|foo bar foo baz foo"))
+  (should (equal (vim-test-quit "foo bar foo baz |foo" "? f o o C-g") "foo bar foo baz |foo"))
+  (should (equal (vim-test-quit "|foo bar foo baz foo" "d / f o o C-g") "|foo bar foo baz foo"))
+  (should (equal (vim-test-quit "|foo bar foo bar" "/ b a r RET / f o o C-g") "foo |bar foo bar"))
+  (vim-test--execute "n")
+  (should (equal (vim-test--result) "foo bar foo |bar")))
 
 (ert-deftest vim-test-move-negative ()
   (should (equal (vim-test "foo bar |baz" "- w") "foo |bar baz"))

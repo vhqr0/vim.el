@@ -273,28 +273,30 @@ When pending, activate TRANSIENT-MAP if non-nil."
 
 (defun vim-move (move-fn move-type)
   "Call MOVE-FN, or apply the pending op on it with MOVE-TYPE."
-  (let ((n (prefix-numeric-value current-prefix-arg)))
-    (if (or (region-active-p) (null vim-pending-op-fn))
+  (let ((n (prefix-numeric-value current-prefix-arg))
+        (op-fn vim-pending-op-fn))
+    (if (or (region-active-p) (null op-fn))
         (funcall move-fn n)
-      (vim-op-on-move n vim-pending-op-fn move-fn move-type)
-      (setq vim-last (list 'op n vim-pending-op-fn move-fn move-type)))))
+      (vim-op-on-move n op-fn move-fn move-type)
+      (setq vim-last (list 'op n op-fn move-fn move-type)))))
 
 (defun vim-exec-last (&optional n)
   "Repeat the last command N times."
   (interactive "p")
-  (let ((vim-in-exec-last t))
+  (let ((vim-in-exec-last t)
+        (last vim-last))
     (dotimes (_ n)
-      (when vim-last
-        (pcase (car-safe vim-last)
+      (when last
+        (pcase (car-safe last)
           ('cmd
-           (cl-destructuring-bind (n cmd-fn) (cdr-safe vim-last)
+           (cl-destructuring-bind (n cmd-fn) (cdr-safe last)
              (funcall cmd-fn n)))
           ('region-op
-           (cl-destructuring-bind (op-fn) (cdr-safe vim-last)
+           (cl-destructuring-bind (op-fn) (cdr-safe last)
              (when (region-active-p)
                (vim-op-on-region op-fn))))
           ('op
-           (cl-destructuring-bind (n op-fn move-fn move-type) (cdr-safe vim-last)
+           (cl-destructuring-bind (n op-fn move-fn move-type) (cdr-safe last)
              (if (region-active-p)
                  (vim-op-on-region op-fn)
                (vim-op-on-move n op-fn move-fn move-type)))))))))
@@ -460,8 +462,16 @@ N is ignored."
   (ignore n)
   (back-to-indentation))
 
+(defun vim-push-jump-mark ()
+  "Push the mark at point before a jump.
+Do nothing if the region is active, as in visual state or while an op
+marks the region of a move."
+  (unless (region-active-p)
+    (push-mark nil t)))
+
 (defun vim-goto-line (n)
   "Go to line N, counting from the end if negative."
+  (vim-push-jump-mark)
   (if (< n 0)
       (progn
         (goto-char (point-max))
@@ -473,6 +483,7 @@ N is ignored."
   "Go to line N with a prefix arg, or to the end of buffer."
   (if current-prefix-arg
       (vim-goto-line n)
+    (vim-push-jump-mark)
     (goto-char (point-max))))
 
 (vim-define-move "h" exclusive #'backward-char)
@@ -592,18 +603,18 @@ Search forward if FORWARD is non-nil."
   (when (< n 0)
     (setq n (- n)
           forward (not forward)))
-  (let ((pt (point)))
-    (if forward
-        (progn
-          (unless (eobp)
-            (forward-char 1))
-          (if (re-search-forward regexp nil t n)
-              (goto-char (match-beginning 0))
-            (goto-char pt)
-            (user-error "Search failed: %s" regexp)))
-      (unless (re-search-backward regexp nil t n)
-        (goto-char pt)
-        (user-error "Search failed: %s" regexp)))))
+  (let ((pos (save-excursion
+               (if forward
+                   (progn
+                     (unless (eobp)
+                       (forward-char 1))
+                     (and (re-search-forward regexp nil t n)
+                          (match-beginning 0)))
+                 (re-search-backward regexp nil t n)))))
+    (unless pos
+      (user-error "Search failed: %s" regexp))
+    (vim-push-jump-mark)
+    (goto-char pos)))
 
 (defun vim-search-next (n)
   "Repeat the last search N times."
@@ -616,36 +627,31 @@ Search forward if FORWARD is non-nil."
   "Repeat the last search N times in the reverse direction."
   (vim-search-next (- n)))
 
+(defun vim-read-search (forward)
+  "Read a search regexp and record it with FORWARD.
+An empty regexp reuses the last one."
+  (if vim-in-exec-last
+      (car vim-search-last)
+    (let ((regexp (read-string (if forward "/" "?") nil 'regexp-history)))
+      (when (string-empty-p regexp)
+        (unless vim-search-last
+          (user-error "No previous search"))
+        (setq regexp (car vim-search-last)))
+      (setq vim-search-last (list regexp forward))
+      regexp)))
+
+(defun vim-search-forward (n)
+  "Search forward for a regexp N times."
+  (vim-search-move n (vim-read-search t) t))
+
+(defun vim-search-backward (n)
+  "Search backward for a regexp N times."
+  (vim-search-move n (vim-read-search nil) nil))
+
 (vim-define-move "n" exclusive #'vim-search-next)
 (vim-define-move "N" exclusive #'vim-search-previous)
-
-(defun vim-search (forward)
-  "Search with isearch, forward if FORWARD is non-nil."
-  (let ((op-fn vim-pending-op-fn)
-        (count current-prefix-arg)
-        (pt (point)))
-    (isearch-mode forward t nil t)
-    (when (> (length isearch-string) 0)
-      (setq vim-search-last
-            (list (if isearch-regexp isearch-string (regexp-quote isearch-string))
-                  forward)))
-    (goto-char pt)
-    (let ((vim-pending-op-fn op-fn)
-          (current-prefix-arg count))
-      (vim-move #'vim-search-next 'exclusive))))
-
-(defun vim-/ ()
-  "Search forward."
-  (interactive)
-  (vim-search t))
-
-(defun vim-? ()
-  "Search backward."
-  (interactive)
-  (vim-search nil))
-
-(keymap-set vim-normal-mode-map "/" #'vim-/)
-(keymap-set vim-normal-mode-map "?" #'vim-?)
+(vim-define-move "/" exclusive #'vim-search-forward)
+(vim-define-move "?" exclusive #'vim-search-backward)
 
 ;;; tobj
 
@@ -1355,7 +1361,8 @@ N is ignored."
 (keymap-set vim-normal-mode-map "R" #'vim-overwrite)
 (keymap-set vim-normal-mode-map "g f" #'find-file-at-point)
 (keymap-set vim-normal-mode-map "g ;" #'vim-goto-last-change)
-(keymap-set vim-normal-mode-map "g o" #'pop-global-mark)
+(keymap-set vim-normal-mode-map "g o" #'pop-to-mark-command)
+(keymap-set vim-normal-mode-map "g O" #'pop-global-mark)
 (keymap-set vim-normal-mode-map "g d" #'xref-find-definitions)
 (keymap-set vim-normal-mode-map "g r" #'revert-buffer-quick)
 (keymap-set vim-normal-mode-map "g R" #'revert-buffer)
