@@ -1284,6 +1284,10 @@ N is ignored."
 
 ;;; misc
 
+(declare-function dired-get-marked-files "dired")
+(declare-function ffap-guesser "ffap")
+(declare-function shell-command-do-open "dired-aux")
+
 (defun vim-execute-in-emacs ()
   "Execute a key sequence without vim bindings."
   (interactive)
@@ -1344,6 +1348,36 @@ N is ignored."
           (self-insert-command 1)))))
     (force-mode-line-update)))
 
+(defvar vim-open-externally-function #'shell-command-do-open
+  "Function opening a list of files or URLs with external applications.")
+
+(defun vim-open-externally-files (files)
+  "Open FILES with external applications.
+Expand file names, but keep URLs as they are."
+  (let ((files (mapcar (lambda (file)
+                         (if (string-match-p "\\`[a-z]+://" file)
+                             file
+                           (expand-file-name file)))
+                       files)))
+    (message "Opening %s externally..." (string-join files ", "))
+    (funcall vim-open-externally-function files)))
+
+(defun vim-open-externally ()
+  "Open the buffer file, or `default-directory', externally."
+  (interactive)
+  (vim-open-externally-files (list (or buffer-file-name default-directory))))
+
+(defun vim-open-externally-at-point ()
+  "Open the file or URL at point externally.
+In Dired, open the marked files, or the file at point."
+  (interactive)
+  (require 'ffap)
+  (vim-open-externally-files
+   (if (derived-mode-p 'dired-mode)
+       (dired-get-marked-files)
+     (list (or (ffap-guesser)
+               (user-error "No file or URL at point"))))))
+
 (keymap-set vim-normal-mode-map "1" #'digit-argument)
 (keymap-set vim-normal-mode-map "2" #'digit-argument)
 (keymap-set vim-normal-mode-map "3" #'digit-argument)
@@ -1365,6 +1399,8 @@ N is ignored."
 (keymap-set vim-normal-mode-map "'" #'jump-to-register)
 (keymap-set vim-normal-mode-map "R" #'vim-overwrite)
 (keymap-set vim-normal-mode-map "g f" #'find-file-at-point)
+(keymap-set vim-normal-mode-map "g x" #'vim-open-externally-at-point)
+(keymap-set vim-normal-mode-map "g X" #'vim-open-externally)
 (keymap-set vim-normal-mode-map "g ;" #'vim-goto-last-change)
 (keymap-set vim-normal-mode-map "g o" #'pop-to-mark-command)
 (keymap-set vim-normal-mode-map "g O" #'pop-global-mark)
